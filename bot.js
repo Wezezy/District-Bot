@@ -1,6 +1,8 @@
 const {getMojangData, addMember, handleNameChange} = require('./dataHandler.js');
 const { syncWhitelist, isServerOnline } = require('./whitelistHandler.js');
 const config = require('./config.json');
+const path = require('path');
+const fs = require('fs');
 
 const { 
 	Client, 
@@ -29,6 +31,7 @@ client.login(config.TOKEN);
 function checkFiles() {
     const dirPath = path.join(__dirname, 'data');
     const membersPath = path.join(dirPath, 'members.json');
+    const relationsPath = path.join(dirPath, 'relations.json'); // Added this definition
 
     if (!fs.existsSync(dirPath)) {
         console.log("Folder 'data' not found. Creating folder 'data'.");
@@ -36,7 +39,13 @@ function checkFiles() {
     }
 
     if (!fs.existsSync(membersPath)) {
-        console.log("File 'members.json' not found. Creating file 'members.json.");
+        console.log("File 'members.json' not found. Creating file 'members.json'.");
+        fs.writeFileSync(membersPath, '[]', 'utf-8');
+    }
+
+    // This was causing the crash!
+    if (!fs.existsSync(relationsPath)) {
+        console.log("File 'relations.json' not found. Creating file 'relations.json'.");
         fs.writeFileSync(relationsPath, '[]', 'utf-8');
     }
 }
@@ -104,8 +113,8 @@ client.on('interactionCreate', async (interaction) => {
 			.setTitle('Enregistrement');
 
 		const mcInput = new TextInputBuilder()
-			.setCustomId('mojang_pseudo')
-			.setLabel("Ton pseudo Mojang pour la whitelist")
+			.setCustomId('minecraft_pseudo')
+			.setLabel("Ton pseudo Minecraft pour la whitelist")
 			.setStyle(TextInputStyle.Short)
 			.setPlaceholder('Ex: Rayqua29000')
 			.setRequired(true);
@@ -128,12 +137,12 @@ client.on('interactionCreate', async (interaction) => {
 	if (interaction.isModalSubmit() && interaction.customId === 'modal_register') {
 		await interaction.deferReply({ ephemeral: true });
 
-		const mojangPseudo = interaction.fields.getTextInputValue('mojang_pseudo');
+		const minecraftPseudo = interaction.fields.getTextInputValue('minecraft_pseudo');
 		const parentPseudo = interaction.fields.getTextInputValue('parent_pseudo');
 		const username = interaction.user.username;
 		const displayName = interaction.member.displayName;
 
-		const mojangData = await getMojangData(mojangPseudo);
+		const mojangData = await getMojangData(minecraftPseudo);
 		if (!mojangData) {
 			return await interaction.editReply({
 				content: 'Le compte Minecraft n\'existe pas. Vérifie l\'orthographe. DM Rayqua si tu n\'y arrive pas.',
@@ -142,11 +151,12 @@ client.on('interactionCreate', async (interaction) => {
 		}
 
 		const validMCName = mojangData.name;
+		const pythonPath = path.join(__dirname, 'venv', 'bin', 'python3');
 
 		addMember(validMCName, username, displayName, parentPseudo);
 		
 		const { exec } = require('child_process');
-		exec('python -u pseudo_cleaner.py', { cwd: './script', shell: true }, (err, stdout, stderr) => {
+		exec(`${pythonPath} -u pseudo_cleaner.py`, { cwd: path.join(__dirname, 'script'), shell: true }, (err, stdout, stderr) => {
 
 			if (stdout) {
 				console.log(`[Cleaner info]:\n${stdout}`);
@@ -158,7 +168,7 @@ client.on('interactionCreate', async (interaction) => {
 			
 			console.log("Pseudos cleaned, graph generating...");
 			
-			exec('python graph_generator.py', { cwd: './script' }, (err) => {
+			exec(`${pythonPath} graph_generator.py`, { cwd: path.join(__dirname, 'script') }, (err) => {
 				if (err) return console.error("Graph error:", err);
 				console.log("Graph udpated !");
 			});
